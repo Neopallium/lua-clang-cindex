@@ -5,7 +5,7 @@ local parse_file = arg[1] or Index_h
 
 local ffi = require"ffi"
 
-local clang = require"clang_c"
+local clang = require"clang.cindex"
 
 --
 -- UnitVisitor
