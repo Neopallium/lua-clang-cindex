@@ -5,7 +5,7 @@ local parse_file = arg[1] or Index_h
 
 local ffi = require"ffi"
 
-local clang = require"clang.cindex"
+local cindex = require"clang.cindex"
 
 --
 -- UnitVisitor
@@ -159,27 +159,27 @@ end
 
 local function TranslationUnitVisitor(cursor, parent, client_data)
 	local file = cursor:getFile()
-	if file == nil then return clang.CXChildVisit_Recurse end
+	if file == nil then return cindex.CXChildVisit_Recurse end
 	if file:getName() ~= parse_file then
-		--return clang.CXChildVisit_Continue
-		return clang.CXChildVisit_Recurse
+		return cindex.CXChildVisit_Recurse
 	end
 	dump_cursor(cursor, parent)
 	cnt = cnt + 1
-	--return clang.CXChildVisit_Continue
-	return clang.CXChildVisit_Recurse
+	return cindex.CXChildVisit_Recurse
 end
 
 
 -- Index
-local Idx = clang.createIndex(1,1)
+local Idx = cindex.createIndex(1,1)
 assert(Idx ~= nil, "Failed to create Idx")
 
 -- This will load all the symbols from Index.h
 local args = {"-x", "c++", "-DNDEBUG", "-D_GNU_SOURCE", "-D__STDC_LIMIT_MACROS", "-D__STDC_CONSTANT_MACROS", "-D__STDC_FORMAT_MACROS"}
-local TU = Idx:parseTranslationUnit(parse_file, args, nil, clang.CXTranslationUnit_SkipFunctionBodies)
+local TU = Idx:parseTranslationUnit(parse_file, args, nil, cindex.CXTranslationUnit_SkipFunctionBodies)
 assert(TU ~= nil, "Failed to create TU")
 
+--[[
+-- Example token dump.
 print("TU range:", TU:getRange())
 local tokens = TU:getTokens()
 tokens:annotateTokens()
@@ -188,17 +188,20 @@ for i=0,tokens:getNumTokens()-1 do
 	local cursor = tokens:getTokenCursor(i)
 	local ckind = cursor:getKind()
 	local kind = tokens:getTokenKind(i)
-	--print(i,"token:", tokens:getTokenKind(i), ckind, cursor)
+	print(i,"token:", tokens:getTokenKind(i), ckind, cursor)
 	if kind == "Comment" then
 		last_comment = i
 	elseif kind == "Keyword" then
 		if ckind == "FunctionDecl" then
 			print(tokens:getTokenSpelling(last_comment))
 			dump_func(cursor)
+		elseif ckind == "CXXAccessSpecifier" or ckind == "CXXBaseSpecifier" then
+			print("-- Access: ",cursor:getCXXAccessSpecifier(), cursor)
 		end
 	end
 	--print(tokens:getTokenSpelling(i))
 end
+--]]
 
 TU:visitChildren(TranslationUnitVisitor)
 print("nodes = ", cnt)

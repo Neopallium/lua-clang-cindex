@@ -31,7 +31,7 @@ local C = ffi.load("/usr/lib/llvm/libclang.so")
 -- process 'enum' types
 local enums = {}
 local E = {}
-for name, values in index_h:gmatch("enum%s+(%w*)%s+(%b{})") do
+for name, values in index_h:gmatch("enum%s+([_%w]*)%s+(%b{})") do
 	local enum = enums[name] or {}
 	enums[name] = enum
 	-- strip comments
@@ -87,9 +87,9 @@ enum CXChildVisitResult clang_c_helper_visitor(CXCursor cursor, CXCursor parent,
 local helper_C = ffi.load("./clang_visitor.so")
 
 local visitors = {}
-local function createVisitor(func, ud)
+local function createVisitor(func, lua_ud)
 	local visitor_ud = ffi.new("HelperVisitorUD", function(cursor, parent, ud)
-		return func(cursor[0], parent[0], ud)
+		return func(cursor[0], parent[0], lua_ud)
 	end, ud)
 	visitors[func] = visitor_ud
 	return helper_C.clang_c_helper_visitor, visitor_ud
@@ -158,6 +158,9 @@ local Type = {}
 function Type:getKind()
 	return K.CXType[self.kind]
 end
+function Type:getCanonical()
+	return C.clang_getCanonicalType(self)
+end
 function Type:isConstQualifiedType()
 	return C.clang_isConstQualifiedType(self) == 1
 end
@@ -200,15 +203,11 @@ end
 function Type:getArrayElementType()
 	return C.clang_getArrayElementType(self)
 end
-function Type:isVirtualBase()
-	return C.clang_isVirtualBase(self)
-end
-function Type:getCXXAccessSpecifier()
-	return K.CX[C.clang_getCXXAccessSpecifier(self)]
-end
 ffi.metatype("CXType", { __index = Type,
-__tostring = function(self) return K.CXType[self.kind] end
-})
+__tostring = function(self) return K.CXType[self.kind] end,
+__eq = function(t1,t2)
+	return (C.clang_equalTypes(t1, t2) == 1)
+end})
 
 -- CXCursor
 local Cursor = {}
@@ -242,6 +241,9 @@ end
 function Cursor:getLanguage()
 	return K.CXLanguage[C.clang_getCursorLanguage(self)]
 end
+function Cursor:getAvailability()
+	return K.CXAvailability[C.clang_getCursorAvailability(self)]
+end
 function Cursor:getSpelling()
 	return CXString(C.clang_getCursorSpelling(self))
 end
@@ -267,18 +269,33 @@ end
 function Cursor:getDefinition()
 	return C.clang_getCursorDefinition(self)
 end
+function Cursor:getSemanticParent()
+	return C.clang_getCursorSemanticParent(self)
+end
+function Cursor:getLexicalParent()
+	return C.clang_getCursorLexicalParent(self)
+end
 function Cursor:isDefinition()
 	return (C.clang_isCursorDefinition(self) == 1)
 end
 function Cursor:getUSR()
 	return CXString(C.clang_getCursorUSR(self))
 end
+function Cursor:isVirtualBase()
+	return C.clang_isVirtualBase(self)
+end
+function Cursor:getCXXAccessSpecifier()
+	return E.CX[C.clang_getCXXAccessSpecifier(self)]
+end
 function Cursor:visitChildren(visitor, ud)
 	local cb, cb_ud = createVisitor(visitor, ud)
 	return C.clang_visitChildren(self, cb, cb_ud)
 end
 ffi.metatype("CXCursor", { __index = Cursor,
-__tostring = function(self) return self:getSpelling() end})
+__tostring = function(self) return self:getSpelling() end,
+__eq = function(c1,c2)
+	return (C.clang_equalCursors(c1, c2) == 1)
+end})
 
 --
 -- Tokens
